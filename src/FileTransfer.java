@@ -1,3 +1,5 @@
+import javax.crypto.Cipher;
+import java.security.interfaces.RSAPrivateKey;
 import java.util.InputMismatchException;
 import java.util.Scanner;
 import java.security.*;
@@ -47,8 +49,9 @@ public class FileTransfer {
             e.printStackTrace(System.err);
         }
     }
+
     private static void serverMode(Scanner scanner)throws Exception{
-        System.out.println("Please enter the name of the file that contains the public key.");
+        System.out.println("Please enter the name of the file that contains the private key.");
         String fileName  = scanner.nextLine();
         System.out.println("Please enter a port number.");
         int portNum;
@@ -63,24 +66,37 @@ public class FileTransfer {
         }
 
         try (ServerSocket serverSocket = new ServerSocket(portNum)){
-            Socket clientSock = serverSocket.accept();
-            ObjectInputStream inputMsgStream = new ObjectInputStream(clientSock.getInputStream());
+            Socket clientSocket = serverSocket.accept();
+            ObjectInputStream inputMsgStream = new ObjectInputStream(clientSocket.getInputStream());
             while(true){
                 Message inputMsg= (Message) inputMsgStream.readObject();
                 if(inputMsg.getType().equals(MessageType.DISCONNECT)){
-                    clientSock.close();
+                    new PrintStream(clientSocket.getOutputStream(),true,"UTF-8").println("Disconnected from server");
+                    clientSocket.close();
                     serverSocket.close();
                 }
                 else if(inputMsg.getType().equals(MessageType.START)){
-                    clientSock.close();
+                    try {
+                        ObjectInputStream in = new ObjectInputStream((new FileInputStream(fileName)));
+                        RSAPrivateKey pKey = (RSAPrivateKey) in.readObject();
+                        Cipher cipher = Cipher.getInstance("RSA");
+                        cipher.init(Cipher.UNWRAP_MODE,pKey);
+                        Key key = cipher.unwrap(((StartMessage) inputMsg).getEncryptedKey(),"AES",Cipher.SECRET_KEY);
+                        new ObjectOutputStream(clientSocket.getOutputStream()).writeObject(new AckMessage(0));
+                    }
+                    catch (Exception e){
+                        new ObjectOutputStream(clientSocket.getOutputStream()).writeObject(new AckMessage(-1));
+                    }
+                    clientSocket.close();
                     serverSocket.close();
                 }
                 else if(inputMsg.getType().equals(MessageType.STOP)){
-                    clientSock.close();
+                    new ObjectOutputStream(clientSocket.getOutputStream()).writeObject(new AckMessage(-1));
+                    clientSocket.close();
                     serverSocket.close();
                 }
                 else if(inputMsg.getType().equals(MessageType.CHUNK)){
-                    clientSock.close();
+                    clientSocket.close();
                     serverSocket.close();
                 }
             }
