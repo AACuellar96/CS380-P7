@@ -1,11 +1,14 @@
 import javax.crypto.Cipher;
 import java.security.interfaces.RSAPrivateKey;
+import java.util.ArrayList;
 import java.util.InputMismatchException;
+import java.util.List;
 import java.util.Scanner;
 import java.security.*;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.zip.CRC32;
 
 public class FileTransfer {
     public static void main(String[] args) throws Exception {
@@ -68,6 +71,11 @@ public class FileTransfer {
         try (ServerSocket serverSocket = new ServerSocket(portNum)){
             Socket clientSocket = serverSocket.accept();
             ObjectInputStream inputMsgStream = new ObjectInputStream(clientSocket.getInputStream());
+            int chunkAmt=0;
+            int expeceted=-1;
+            Key key=null;
+            List<byte[]> dataList = new ArrayList<byte[]>();
+            ObjectOutputStream os = new ObjectOutputStream(clientSocket.getOutputStream());
             while(true){
                 Message inputMsg= (Message) inputMsgStream.readObject();
                 if(inputMsg.getType().equals(MessageType.DISCONNECT)){
@@ -77,27 +85,44 @@ public class FileTransfer {
                 }
                 else if(inputMsg.getType().equals(MessageType.START)){
                     try {
+                        chunkAmt= (int) Math.ceil(  ((double) ((StartMessage) inputMsg).getSize()) /   ((double) ((StartMessage) inputMsg).getChunkSize())      );
                         ObjectInputStream in = new ObjectInputStream((new FileInputStream(fileName)));
-                        RSAPrivateKey pKey = (RSAPrivateKey) in.readObject();
+                        PrivateKey pKey = (PrivateKey) in.readObject();
                         Cipher cipher = Cipher.getInstance("RSA");
                         cipher.init(Cipher.UNWRAP_MODE,pKey);
-                        Key key = cipher.unwrap(((StartMessage) inputMsg).getEncryptedKey(),"AES",Cipher.SECRET_KEY);
-                        new ObjectOutputStream(clientSocket.getOutputStream()).writeObject(new AckMessage(0));
+                        key = cipher.unwrap(((StartMessage) inputMsg).getEncryptedKey(),"AES",Cipher.SECRET_KEY);
+                        os.writeObject(new AckMessage(0));
+                        expeceted=0;
                     }
                     catch (Exception e){
                         new ObjectOutputStream(clientSocket.getOutputStream()).writeObject(new AckMessage(-1));
+                        expeceted=-1;
                     }
-                    clientSocket.close();
-                    serverSocket.close();
                 }
                 else if(inputMsg.getType().equals(MessageType.STOP)){
                     new ObjectOutputStream(clientSocket.getOutputStream()).writeObject(new AckMessage(-1));
-                    clientSocket.close();
-                    serverSocket.close();
+                    expeceted=-1;
+                    dataList.clear();
                 }
                 else if(inputMsg.getType().equals(MessageType.CHUNK)){
-                    clientSocket.close();
-                    serverSocket.close();
+                    if(expeceted==((Chunk) inputMsg).getSeq()) {
+                        if (expeceted != chunkAmt) {
+                            byte[] chunkData = ((Chunk) inputMsg).getData();
+                            Cipher cipher = Cipher.getInstance("AES");
+                            cipher.init(Cipher.DECRYPT_MODE, key);
+                            byte[] decryptedDat = cipher.doFinal(chunkData);
+                            CRC32 crc = new CRC32();
+                            crc.update(decryptedDat);
+                            if (crc.getValue() == ((Chunk) inputMsg).getCrc()) {
+                                expeceted++;
+                                dataList.add(decryptedDat);
+                            }
+                            os.writeObject(new AckMessage(expeceted));
+                        }
+                        else{
+                            System.out.println("Transfer complete");
+                        }
+                    }
                 }
             }
         }
