@@ -72,7 +72,7 @@ public class FileTransfer {
             Socket clientSocket = serverSocket.accept();
             ObjectInputStream inputMsgStream = new ObjectInputStream(clientSocket.getInputStream());
             int chunkAmt=0;
-            int expeceted=-1;
+            int expected=-1;
             Key key=null;
             List<byte[]> dataList = new ArrayList<byte[]>();
             ObjectOutputStream os = new ObjectOutputStream(clientSocket.getOutputStream());
@@ -92,21 +92,21 @@ public class FileTransfer {
                         cipher.init(Cipher.UNWRAP_MODE,pKey);
                         key = cipher.unwrap(((StartMessage) inputMsg).getEncryptedKey(),"AES",Cipher.SECRET_KEY);
                         os.writeObject(new AckMessage(0));
-                        expeceted=0;
+                        expected=0;
                     }
                     catch (Exception e){
                         new ObjectOutputStream(clientSocket.getOutputStream()).writeObject(new AckMessage(-1));
-                        expeceted=-1;
+                        expected=-1;
                     }
                 }
                 else if(inputMsg.getType().equals(MessageType.STOP)){
                     new ObjectOutputStream(clientSocket.getOutputStream()).writeObject(new AckMessage(-1));
-                    expeceted=-1;
+                    expected=-1;
                     dataList.clear();
                 }
                 else if(inputMsg.getType().equals(MessageType.CHUNK)){
-                    if(expeceted==((Chunk) inputMsg).getSeq()) {
-                        if (expeceted != chunkAmt) {
+                    if(expected==((Chunk) inputMsg).getSeq()) {
+                        if (expected != chunkAmt) {
                             byte[] chunkData = ((Chunk) inputMsg).getData();
                             Cipher cipher = Cipher.getInstance("AES");
                             cipher.init(Cipher.DECRYPT_MODE, key);
@@ -114,13 +114,20 @@ public class FileTransfer {
                             CRC32 crc = new CRC32();
                             crc.update(decryptedDat);
                             if (crc.getValue() == ((Chunk) inputMsg).getCrc()) {
-                                expeceted++;
-                                dataList.add(decryptedDat);
+                                expected++;
+                                if(expected==1){
+                                    new FileOutputStream("ServerMode.txt").write(decryptedDat);
+                                }
+                                else {
+                                    new FileOutputStream("ServerMode.txt",true).write(decryptedDat);
+                                }
+                                System.out.println("Chunk received [" + expected + "/" + chunkAmt + "].");
                             }
-                            os.writeObject(new AckMessage(expeceted));
+                            os.writeObject(new AckMessage(expected));
                         }
                         else{
-                            System.out.println("Transfer complete");
+                            System.out.println("Transfer complete.");
+                            System.out.println("Output path: ServerMode.txt");
                         }
                     }
                 }
