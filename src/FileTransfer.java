@@ -65,6 +65,7 @@ public class FileTransfer {
                     new PrintStream(clientSocket.getOutputStream(),true,"UTF-8").println("Disconnected from server");
                     clientSocket.close();
                     serverSocket.close();
+                    break;
                 }
                 else if(inputMsg.getType().equals(MessageType.START)){
                     try {
@@ -130,48 +131,70 @@ public class FileTransfer {
             Key pubKey =(Key) new ObjectInputStream(new FileInputStream(fileName)).readObject();
             cipher.init(Cipher.WRAP_MODE,pubKey);
             byte[] wKey = cipher.wrap(sKey);
-            System.out.println("Enter path: ");
-            String filePath;
-            Scanner scanner = new Scanner(System.in);
-            while(true){
-                filePath = scanner.nextLine();
-                if(new File(filePath).exists())
-                    break;
-                System.out.println("Enter a valid path: ");
-            }
-            System.out.println("Enter chunk size [1024]: ");
-            int size;
-            try{
-                size= scanner.nextInt();
-            }
-            catch (InputMismatchException e){
-                size=1024;
-            }
-            StartMessage start = new StartMessage(filePath,wKey,size);
-            objectOut.writeObject(start);
-            int chunkAmt = (int) Math.ceil(start.getSize()/(double) start.getChunkSize());
-            int seqNum = ((AckMessage) objectInp.readObject()).getSeq();
-            if(seqNum==0) {
-                System.out.println("Sending: " + fileName + ". File size: " + (int) start.getSize());
-                System.out.println("Sending " + chunkAmt + " chunks.");
-                while(seqNum<chunkAmt) {
-                    byte[] data = new byte[(int) start.getSize()];
-                    FileInputStream fileInp = new FileInputStream(filePath);
-                    for (int i = 0; i < data.length; i++) {
-                        data[i] = (byte) fileInp.read();
-                    }
-                    fileInp.close();
-                    CRC32 crc = new CRC32();
-                    crc.update(data);
-                    int crcVal = (int) crc.getValue();
-                    Cipher encryptCipher = Cipher.getInstance("AES");
-                    encryptCipher.init(Cipher.ENCRYPT_MODE, sKey);
-                    data = encryptCipher.doFinal(data);
-                    objectOut.writeObject(new Chunk(seqNum,data,crcVal));
-                    seqNum++;
-                    System.out.println("Chunks completed [" + seqNum + "/" + chunkAmt + "].");
+            while(true) {
+                System.out.println("Enter path: ");
+                String filePath;
+                Scanner scanner = new Scanner(System.in);
+                while (true) {
+                    filePath = scanner.nextLine();
+                    if (new File(filePath).exists())
+                        break;
+                    System.out.println("Enter a valid path: ");
                 }
+                System.out.println("Enter chunk size [1024]: ");
+                int size;
+                try {
+                    size = scanner.nextInt();
+                } catch (InputMismatchException e) {
+                    size = 1024;
+                }
+                StartMessage start = new StartMessage(filePath, wKey, size);
+                objectOut.writeObject(start);
+                int chunkAmt = (int) Math.ceil(start.getSize() / (double) start.getChunkSize());
+                int seqNum = ((AckMessage) objectInp.readObject()).getSeq();
+                if (seqNum == 0) {
+                    System.out.println("Sending: " + fileName + ". File size: " + (int) start.getSize());
+                    System.out.println("Sending " + chunkAmt + " chunks.");
+                    while (seqNum < chunkAmt) {
+                        byte[] data = new byte[(int) start.getSize()];
+                        FileInputStream fileInp = new FileInputStream(filePath);
+                        for (int i = 0; i < data.length; i++) {
+                            data[i] = (byte) fileInp.read();
+                        }
+                        fileInp.close();
+                        CRC32 crc = new CRC32();
+                        crc.update(data);
+                        int crcVal = (int) crc.getValue();
+                        Cipher encryptCipher = Cipher.getInstance("AES");
+                        encryptCipher.init(Cipher.ENCRYPT_MODE, sKey);
+                        data = encryptCipher.doFinal(data);
+                        objectOut.writeObject(new Chunk(seqNum, data, crcVal));
+                        seqNum++;
+                        System.out.println("Chunks completed [" + seqNum + "/" + chunkAmt + "].");
+                    }
 
+                }
+                System.out.println("Would you like to 1. transfer a new file or 2. disconnect. Any other input besides 1 or 2 will default to disconnect.");
+                int choice=2;
+                try {
+                    scanner.nextLine();
+                    choice = Integer.parseInt(scanner.nextLine());
+                }
+                catch (Exception e){
+                    System.out.println("Invalid input detected, defaulting to disconnect.");
+                }
+                if(choice!=1 && choice!=2){
+                    System.out.println("Invalid input detected, defaulting to disconnect.");
+                    choice=2;
+                }
+                if(choice==1){
+                    continue;
+                }
+                else{
+                    objectOut.writeObject(new DisconnectMessage());
+                    socket.close();
+                    break;
+                }
             }
         }
     }
