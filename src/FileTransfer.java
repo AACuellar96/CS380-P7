@@ -141,6 +141,14 @@ public class FileTransfer {
             catch (InputMismatchException e){
                 size=1024;
             }
+            StartMessage start = new StartMessage(filePath,wKey,size);
+            objectOut.writeObject(start);
+            if(((AckMessage) objectInp.readObject()).getSeq()==0){
+                byte[] data = new byte[(int) start.getSize()];
+                int chunkAmt = (int) Math.ceil(start.getSize()/(double) start.getChunkSize());
+                System.out.println("Sending: " + fileName + ". File size: " + data.length);
+                System.out.println("Sending " + chunkAmt+ " chunks.");
+            }
 
         }
     }
