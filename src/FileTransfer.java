@@ -1,4 +1,6 @@
 import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
 import java.security.interfaces.RSAPrivateKey;
 import java.util.ArrayList;
 import java.util.InputMismatchException;
@@ -112,6 +114,33 @@ public class FileTransfer {
 
     private static void clientMode(String fileName,String host, int portNum)throws Exception{
         try (Socket socket = new Socket(host,portNum)) {
+            System.out.println("Connected to server: " + host + "/" + socket.getInetAddress().getHostAddress());
+            ObjectOutputStream objectOut = new ObjectOutputStream(socket.getOutputStream());
+            ObjectInputStream objectInp = new ObjectInputStream(socket.getInputStream());
+            KeyGenerator keyGen = KeyGenerator.getInstance("AES");
+            keyGen.init(128);
+            SecretKey sKey = keyGen.generateKey();
+            Cipher cipher = Cipher.getInstance("RSA");
+            Key pubKey =(Key) new ObjectInputStream(new FileInputStream(fileName)).readObject();
+            cipher.init(Cipher.WRAP_MODE,pubKey);
+            byte[] wKey = cipher.wrap(sKey);
+            System.out.println("Enter path: ");
+            String filePath;
+            Scanner scanner = new Scanner(System.in);
+            while(true){
+                filePath = scanner.nextLine();
+                if(new File(filePath).exists())
+                    break;
+                System.out.println("Enter a valid path: ");
+            }
+            System.out.println("Enter chunk size [1024]: ");
+            int size;
+            try{
+                size= scanner.nextInt();
+            }
+            catch (InputMismatchException e){
+                size=1024;
+            }
 
         }
     }
