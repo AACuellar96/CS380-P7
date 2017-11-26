@@ -75,8 +75,8 @@ public class FileTransfer {
                         Cipher cipher = Cipher.getInstance("RSA");
                         cipher.init(Cipher.UNWRAP_MODE,pKey);
                         key = cipher.unwrap(((StartMessage) inputMsg).getEncryptedKey(),"AES",Cipher.SECRET_KEY);
-                        os.writeObject(new AckMessage(0));
                         expected=0;
+                        os.writeObject(new AckMessage(0));
                     }
                     catch (Exception e){
                         new ObjectOutputStream(clientSocket.getOutputStream()).writeObject(new AckMessage(-1));
@@ -108,9 +108,10 @@ public class FileTransfer {
                             }
                             os.writeObject(new AckMessage(expected));
                         }
-                        else{
+                        if(expected==chunkAmt){
                             System.out.println("Transfer complete.");
                             System.out.println("Output path: test2.txt");
+                            expected=-1;
                         }
                     }
                 }
@@ -169,10 +170,9 @@ public class FileTransfer {
                         encryptCipher.init(Cipher.ENCRYPT_MODE, sKey);
                         data = encryptCipher.doFinal(data);
                         objectOut.writeObject(new Chunk(seqNum, data, crcVal));
-                        seqNum++;
+                        seqNum = ((AckMessage) objectInp.readObject()).getSeq();
                         System.out.println("Chunks completed [" + seqNum + "/" + chunkAmt + "].");
                     }
-
                 }
                 System.out.println("Would you like to 1. transfer a new file or 2. disconnect. Any other input besides 1 or 2 will default to disconnect.");
                 int choice=2;
