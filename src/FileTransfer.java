@@ -14,13 +14,21 @@ import java.util.zip.CRC32;
 
 public class FileTransfer {
     public static void main(String[] args) throws Exception {
+        if(args.length>0) {
             if (args[0].equalsIgnoreCase("makekeys")) {
                 keyGen();
+                System.out.println("Keys generated.");
             } else if (args[0].equalsIgnoreCase("server")) {
-                serverMode(args[1],Integer.parseInt(args[2]));
+                serverMode(args[1], Integer.parseInt(args[2]));
             } else if (args[0].equalsIgnoreCase("client")) {
-                clientMode(args[1],args[2],Integer.parseInt(args[3]));
+                clientMode(args[1], args[2], Integer.parseInt(args[3]));
+            } else {
+                System.out.println("Invalid arguments.");
             }
+        }
+        else{
+            System.out.println("No arguments detected.");
+        }
     }
 
     private static void keyGen(){
@@ -50,7 +58,6 @@ public class FileTransfer {
             int chunkAmt=0;
             int expected=-1;
             Key key=null;
-            List<byte[]> dataList = new ArrayList<byte[]>();
             ObjectOutputStream os = new ObjectOutputStream(clientSocket.getOutputStream());
             while(true){
                 Message inputMsg= (Message) inputMsgStream.readObject();
@@ -78,7 +85,6 @@ public class FileTransfer {
                 else if(inputMsg.getType().equals(MessageType.STOP)){
                     new ObjectOutputStream(clientSocket.getOutputStream()).writeObject(new AckMessage(-1));
                     expected=-1;
-                    dataList.clear();
                 }
                 else if(inputMsg.getType().equals(MessageType.CHUNK)){
                     if(expected==((Chunk) inputMsg).getSeq()) {
