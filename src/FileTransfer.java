@@ -143,13 +143,30 @@ public class FileTransfer {
             }
             StartMessage start = new StartMessage(filePath,wKey,size);
             objectOut.writeObject(start);
-            if(((AckMessage) objectInp.readObject()).getSeq()==0){
-                byte[] data = new byte[(int) start.getSize()];
-                int chunkAmt = (int) Math.ceil(start.getSize()/(double) start.getChunkSize());
-                System.out.println("Sending: " + fileName + ". File size: " + data.length);
-                System.out.println("Sending " + chunkAmt+ " chunks.");
-            }
+            int chunkAmt = (int) Math.ceil(start.getSize()/(double) start.getChunkSize());
+            int seqNum = ((AckMessage) objectInp.readObject()).getSeq();
+            if(seqNum==0) {
+                System.out.println("Sending: " + fileName + ". File size: " + (int) start.getSize());
+                System.out.println("Sending " + chunkAmt + " chunks.");
+                while(seqNum<chunkAmt) {
+                    byte[] data = new byte[(int) start.getSize()];
+                    FileInputStream fileInp = new FileInputStream(filePath);
+                    for (int i = 0; i < data.length; i++) {
+                        data[i] = (byte) fileInp.read();
+                    }
+                    fileInp.close();
+                    CRC32 crc = new CRC32();
+                    crc.update(data);
+                    int crcVal = (int) crc.getValue();
+                    Cipher encryptCipher = Cipher.getInstance("AES");
+                    encryptCipher.init(Cipher.ENCRYPT_MODE, sKey);
+                    data = encryptCipher.doFinal(data);
+                    objectOut.writeObject(new Chunk(seqNum,data,crcVal));
+                    seqNum++;
+                    System.out.println("Chunks completed [" + seqNum + "/" + chunkAmt + "].");
+                }
 
+            }
         }
     }
 }
