@@ -12,25 +12,13 @@ import java.util.zip.CRC32;
 
 public class FileTransfer {
     public static void main(String[] args) throws Exception {
-        System.out.println("Please enter your command.");
-        Scanner scanner = new Scanner(System.in);
-        String inp = scanner.nextLine();
-        while(true) {
-            if (inp.equalsIgnoreCase("makekeys")) {
+            if (args[0].equalsIgnoreCase("makekeys")) {
                 keyGen();
-                break;
-            } else if (inp.equalsIgnoreCase("server")) {
-                serverMode(scanner);
-                break;
-            } else if (inp.equalsIgnoreCase("client")) {
-                clientMode(scanner);
-                break;
+            } else if (args[0].equalsIgnoreCase("server")) {
+                serverMode(args[1],Integer.parseInt(args[2]));
+            } else if (args[0].equalsIgnoreCase("client")) {
+                clientMode(args[1],args[2],Integer.parseInt(args[3]));
             }
-            else{
-                System.out.println("Invalid input, please enter a valid argument.");
-                inp = scanner.nextLine();
-            }
-        }
     }
 
     private static void keyGen(){
@@ -53,21 +41,7 @@ public class FileTransfer {
         }
     }
 
-    private static void serverMode(Scanner scanner)throws Exception{
-        System.out.println("Please enter the name of the file that contains the private key.");
-        String fileName  = scanner.nextLine();
-        System.out.println("Please enter a port number.");
-        int portNum;
-        while(true) {
-            try {
-                portNum = scanner.nextByte();
-                break;
-            } catch (InputMismatchException e) {
-                System.out.println("Noninteger detected. Please enter a port number.");
-                scanner.nextLine();
-            }
-        }
-
+    private static void serverMode(String fileName, int portNum)throws Exception{
         try (ServerSocket serverSocket = new ServerSocket(portNum)){
             Socket clientSocket = serverSocket.accept();
             ObjectInputStream inputMsgStream = new ObjectInputStream(clientSocket.getInputStream());
@@ -116,10 +90,10 @@ public class FileTransfer {
                             if (crc.getValue() == ((Chunk) inputMsg).getCrc()) {
                                 expected++;
                                 if(expected==1){
-                                    new FileOutputStream("ServerMode.txt").write(decryptedDat);
+                                    new FileOutputStream("test2.txt").write(decryptedDat);
                                 }
                                 else {
-                                    new FileOutputStream("ServerMode.txt",true).write(decryptedDat);
+                                    new FileOutputStream("test2.txt",true).write(decryptedDat);
                                 }
                                 System.out.println("Chunk received [" + expected + "/" + chunkAmt + "].");
                             }
@@ -127,7 +101,7 @@ public class FileTransfer {
                         }
                         else{
                             System.out.println("Transfer complete.");
-                            System.out.println("Output path: ServerMode.txt");
+                            System.out.println("Output path: test2.txt");
                         }
                     }
                 }
@@ -136,22 +110,7 @@ public class FileTransfer {
 
     }
 
-    private static void clientMode(Scanner scanner)throws Exception{
-        System.out.println("Please enter the name of the file that contains the public key.");
-        String fileName = scanner.nextLine();
-        System.out.println("Please enter  the host that will be connected to.");
-        String host = scanner.nextLine();
-        System.out.println("Please enter a port number.");
-        int portNum;
-        while(true) {
-            try {
-                portNum = scanner.nextByte();
-                break;
-            } catch (InputMismatchException e) {
-                System.out.println("Noninteger detected. Please enter a port number.");
-                scanner.nextLine();
-            }
-        }
+    private static void clientMode(String fileName,String host, int portNum)throws Exception{
         try (Socket socket = new Socket(host,portNum)) {
 
         }
