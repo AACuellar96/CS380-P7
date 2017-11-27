@@ -1,7 +1,6 @@
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
-import java.security.interfaces.RSAPrivateKey;
 import java.util.*;
 import java.security.*;
 import java.io.*;
@@ -68,11 +67,10 @@ public class FileTransfer {
                     try {
                         chunkAmt= (int) Math.ceil(  ((double) ((StartMessage) inputMsg).getSize()) /   ((double) ((StartMessage) inputMsg).getChunkSize())      );
                         ObjectInputStream in = new ObjectInputStream((new FileInputStream(fileName)));
-                        Key privateKey = (Key) in.readObject();
+                        PrivateKey privateKey = (PrivateKey) in.readObject();
                         Cipher cipher = Cipher.getInstance("RSA");
                         cipher.init(Cipher.UNWRAP_MODE,privateKey);
                         key = cipher.unwrap(((StartMessage) inputMsg).getEncryptedKey(),"AES",Cipher.SECRET_KEY);
-                        System.out.println(key.getEncoded());
                         expected=0;
                         os.writeObject(new AckMessage(0));
                     }
@@ -93,7 +91,7 @@ public class FileTransfer {
                             byte[] decryptedDat = cipher.doFinal(((Chunk) inputMsg).getData());
                             CRC32 crc = new CRC32();
                             crc.update(decryptedDat);
-                            if (crc.getValue() == ((Chunk) inputMsg).getCrc()) {
+                            if ((int) crc.getValue() == ((Chunk) inputMsg).getCrc()) {
                                 expected++;
                                 if(expected==1){
                                     new FileOutputStream("test2.txt").write(decryptedDat);
@@ -127,9 +125,8 @@ public class FileTransfer {
             KeyGenerator keyGen = KeyGenerator.getInstance("AES");
             keyGen.init(128);
             SecretKey sessionKey = keyGen.generateKey();
-            System.out.println(sessionKey.getEncoded());
             Cipher cipher = Cipher.getInstance("RSA");
-            Key publicKey =(Key) new ObjectInputStream(new FileInputStream(fileName)).readObject();
+            PublicKey publicKey =(PublicKey) new ObjectInputStream(new FileInputStream(fileName)).readObject();
             cipher.init(Cipher.WRAP_MODE,publicKey);
             byte[] wrappedKey = cipher.wrap(sessionKey);
              while(true){
@@ -154,23 +151,21 @@ public class FileTransfer {
                 int chunkAmt = (int) Math.ceil(start.getSize() / (double) start.getChunkSize());
                 int seqNum = ((AckMessage) objectInp.readObject()).getSeq();
                 if (seqNum == 0) {
-                    System.out.println("Sending: " + fileName + ". File size: " + (int) start.getSize());
-                    System.out.println("Sending " + chunkAmt + " chunks.");
                     File file = new File(filePath);
+                    System.out.println("Sending: " + filePath + ". File size: " + (int) file.length());
+                    System.out.println("Sending " + chunkAmt + " chunks.");
                     FileInputStream fileInp = new FileInputStream(file);
-                    byte[] data = new byte[(int) file.length()];
-                    fileInp.read(data);
-                    fileInp.close();
                     Cipher encryptCipher = Cipher.getInstance("AES");
                     encryptCipher.init(Cipher.ENCRYPT_MODE, sessionKey);
                     while (seqNum < chunkAmt) {
-                        byte[] dataToSend = Arrays.copyOfRange(data,seqNum*start.getChunkSize(),(seqNum+1)*start.getChunkSize()-1) ;
-                        CRC32 crc = new CRC32();
-                        crc.update(dataToSend);
-                        byte[] encryptedDataToSend = encryptCipher.doFinal(dataToSend);
-                        objectOut.writeObject(new Chunk(seqNum, encryptedDataToSend, (int) crc.getValue()));
-                        seqNum = ((AckMessage) objectInp.readObject()).getSeq();
-                        System.out.println("Chunks completed [" + seqNum + "/" + chunkAmt + "].");
+                       byte[] data = new byte[start.getChunkSize()];
+                       fileInp.read(data);
+                       CRC32 crc = new CRC32();
+                       crc.update(data);
+                       byte[] encryptedData = encryptCipher.doFinal(data);
+                       objectOut.writeObject(new Chunk(seqNum, encryptedData, (int) crc.getValue()));
+                       seqNum = ((AckMessage) objectInp.readObject()).getSeq();
+                       System.out.println("Chunks completed [" + seqNum + "/" + chunkAmt + "].");
                     }
                 }
                 System.out.println("Would you like to 1. transfer a new file or 2. disconnect. Any other input besides 1 or 2 will default to disconnect.");
