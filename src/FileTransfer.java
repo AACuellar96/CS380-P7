@@ -54,6 +54,7 @@ public class FileTransfer {
             int chunkAmt=0;
             int expected=-1;
             Key key=null;
+            String copyFile="Output.txt";
             ObjectOutputStream os = new ObjectOutputStream(clientSocket.getOutputStream());
             while(true){
                 Message inputMsg= (Message) inputMsgStream.readObject();
@@ -71,6 +72,7 @@ public class FileTransfer {
                         Cipher cipher = Cipher.getInstance("RSA");
                         cipher.init(Cipher.UNWRAP_MODE,privateKey);
                         key = cipher.unwrap(((StartMessage) inputMsg).getEncryptedKey(),"AES",Cipher.SECRET_KEY);
+                        copyFile = "CopyOf"+((StartMessage) inputMsg).getFile();
                         expected=0;
                         os.writeObject(new AckMessage(0));
                     }
@@ -94,10 +96,10 @@ public class FileTransfer {
                             if ((int) crc.getValue() == ((Chunk) inputMsg).getCrc()) {
                                 expected++;
                                 if(expected==1){
-                                    new FileOutputStream("test2.txt").write(decryptedDat);
+                                    new FileOutputStream(copyFile).write(decryptedDat);
                                 }
                                 else {
-                                    new FileOutputStream("test2.txt",true).write(decryptedDat);
+                                    new FileOutputStream(copyFile,true).write(decryptedDat);
                                 }
                                 System.out.println("Chunk received [" + expected + "/" + chunkAmt + "].");
                                 os.writeObject(new AckMessage(expected));
@@ -105,10 +107,12 @@ public class FileTransfer {
                         }
                         if(expected==chunkAmt){
                             System.out.println("Transfer complete.");
-                            System.out.println("Output path: test2.txt");
+                            System.out.println("Output path: " + copyFile);
+                            System.out.println("");
                             expected=-1;
                             chunkAmt=0;
                             key=null;
+                            copyFile="Output.txt";
                         }
                     }
                 }
@@ -158,7 +162,13 @@ public class FileTransfer {
                     Cipher encryptCipher = Cipher.getInstance("AES");
                     encryptCipher.init(Cipher.ENCRYPT_MODE, sessionKey);
                     while (seqNum < chunkAmt) {
-                       byte[] data = new byte[start.getChunkSize()];
+                        byte[] data;
+                        if(start.getChunkSize()*(seqNum+1)<=file.length()) {
+                            data = new byte[start.getChunkSize()];
+                        }
+                        else{
+                            data = new byte[(int) file.length()%start.getChunkSize()];
+                        }
                        fileInp.read(data);
                        CRC32 crc = new CRC32();
                        crc.update(data);
