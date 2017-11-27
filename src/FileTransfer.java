@@ -2,10 +2,7 @@ import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import java.security.interfaces.RSAPrivateKey;
-import java.util.ArrayList;
-import java.util.InputMismatchException;
-import java.util.List;
-import java.util.Scanner;
+import java.util.*;
 import java.security.*;
 import java.io.*;
 import java.net.ServerSocket;
@@ -71,15 +68,16 @@ public class FileTransfer {
                     try {
                         chunkAmt= (int) Math.ceil(  ((double) ((StartMessage) inputMsg).getSize()) /   ((double) ((StartMessage) inputMsg).getChunkSize())      );
                         ObjectInputStream in = new ObjectInputStream((new FileInputStream(fileName)));
-                        PrivateKey pKey = (PrivateKey) in.readObject();
+                        Key privateKey = (Key) in.readObject();
                         Cipher cipher = Cipher.getInstance("RSA");
-                        cipher.init(Cipher.UNWRAP_MODE,pKey);
+                        cipher.init(Cipher.UNWRAP_MODE,privateKey);
                         key = cipher.unwrap(((StartMessage) inputMsg).getEncryptedKey(),"AES",Cipher.SECRET_KEY);
+                        System.out.println(key.getEncoded());
                         expected=0;
                         os.writeObject(new AckMessage(0));
                     }
                     catch (Exception e){
-                        new ObjectOutputStream(clientSocket.getOutputStream()).writeObject(new AckMessage(-1));
+                        os.writeObject(new AckMessage(-1));
                         expected=-1;
                     }
                 }
@@ -89,11 +87,10 @@ public class FileTransfer {
                 }
                 else if(inputMsg.getType().equals(MessageType.CHUNK)){
                     if(expected==((Chunk) inputMsg).getSeq()) {
-                        if (expected != chunkAmt) {
-                            byte[] chunkData = ((Chunk) inputMsg).getData();
+                        if (expected < chunkAmt) {
                             Cipher cipher = Cipher.getInstance("AES");
                             cipher.init(Cipher.DECRYPT_MODE, key);
-                            byte[] decryptedDat = cipher.doFinal(chunkData);
+                            byte[] decryptedDat = cipher.doFinal(((Chunk) inputMsg).getData());
                             CRC32 crc = new CRC32();
                             crc.update(decryptedDat);
                             if (crc.getValue() == ((Chunk) inputMsg).getCrc()) {
@@ -105,13 +102,15 @@ public class FileTransfer {
                                     new FileOutputStream("test2.txt",true).write(decryptedDat);
                                 }
                                 System.out.println("Chunk received [" + expected + "/" + chunkAmt + "].");
+                                os.writeObject(new AckMessage(expected));
                             }
-                            os.writeObject(new AckMessage(expected));
                         }
                         if(expected==chunkAmt){
                             System.out.println("Transfer complete.");
                             System.out.println("Output path: test2.txt");
                             expected=-1;
+                            chunkAmt=0;
+                            key=null;
                         }
                     }
                 }
@@ -127,12 +126,13 @@ public class FileTransfer {
             ObjectInputStream objectInp = new ObjectInputStream(socket.getInputStream());
             KeyGenerator keyGen = KeyGenerator.getInstance("AES");
             keyGen.init(128);
-            SecretKey sKey = keyGen.generateKey();
+            SecretKey sessionKey = keyGen.generateKey();
+            System.out.println(sessionKey.getEncoded());
             Cipher cipher = Cipher.getInstance("RSA");
-            Key pubKey =(Key) new ObjectInputStream(new FileInputStream(fileName)).readObject();
-            cipher.init(Cipher.WRAP_MODE,pubKey);
-            byte[] wKey = cipher.wrap(sKey);
-            while(true) {
+            Key publicKey =(Key) new ObjectInputStream(new FileInputStream(fileName)).readObject();
+            cipher.init(Cipher.WRAP_MODE,publicKey);
+            byte[] wrappedKey = cipher.wrap(sessionKey);
+             while(true){
                 System.out.println("Enter path: ");
                 String filePath;
                 Scanner scanner = new Scanner(System.in);
@@ -149,27 +149,26 @@ public class FileTransfer {
                 } catch (InputMismatchException e) {
                     size = 1024;
                 }
-                StartMessage start = new StartMessage(filePath, wKey, size);
+                StartMessage start = new StartMessage(filePath, wrappedKey, size);
                 objectOut.writeObject(start);
                 int chunkAmt = (int) Math.ceil(start.getSize() / (double) start.getChunkSize());
                 int seqNum = ((AckMessage) objectInp.readObject()).getSeq();
                 if (seqNum == 0) {
                     System.out.println("Sending: " + fileName + ". File size: " + (int) start.getSize());
                     System.out.println("Sending " + chunkAmt + " chunks.");
+                    File file = new File(filePath);
+                    FileInputStream fileInp = new FileInputStream(file);
+                    byte[] data = new byte[(int) file.length()];
+                    fileInp.read(data);
+                    fileInp.close();
+                    Cipher encryptCipher = Cipher.getInstance("AES");
+                    encryptCipher.init(Cipher.ENCRYPT_MODE, sessionKey);
                     while (seqNum < chunkAmt) {
-                        byte[] data = new byte[(int) start.getSize()];
-                        FileInputStream fileInp = new FileInputStream(filePath);
-                        for (int i = 0; i < data.length; i++) {
-                            data[i] = (byte) fileInp.read();
-                        }
-                        fileInp.close();
+                        byte[] dataToSend = Arrays.copyOfRange(data,seqNum*start.getChunkSize(),(seqNum+1)*start.getChunkSize()-1) ;
                         CRC32 crc = new CRC32();
-                        crc.update(data);
-                        int crcVal = (int) crc.getValue();
-                        Cipher encryptCipher = Cipher.getInstance("AES");
-                        encryptCipher.init(Cipher.ENCRYPT_MODE, sKey);
-                        data = encryptCipher.doFinal(data);
-                        objectOut.writeObject(new Chunk(seqNum, data, crcVal));
+                        crc.update(dataToSend);
+                        byte[] encryptedDataToSend = encryptCipher.doFinal(dataToSend);
+                        objectOut.writeObject(new Chunk(seqNum, encryptedDataToSend, (int) crc.getValue()));
                         seqNum = ((AckMessage) objectInp.readObject()).getSeq();
                         System.out.println("Chunks completed [" + seqNum + "/" + chunkAmt + "].");
                     }
@@ -187,10 +186,7 @@ public class FileTransfer {
                     System.out.println("Invalid input detected, defaulting to disconnect.");
                     choice=2;
                 }
-                if(choice==1){
-                    continue;
-                }
-                else{
+                if(choice!=1){
                     objectOut.writeObject(new DisconnectMessage());
                     socket.close();
                     break;
